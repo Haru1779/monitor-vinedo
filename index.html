@@ -3,11 +3,11 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Monitor Viñedo - Esquel</title>
+    <title>Monitor Viñedo Baruk</title>
     <script type="text/javascript" src="https://www.gstatic.com/charts/loader.js"></script>
     <style>
         body { font-family: 'Segoe UI', sans-serif; background: #e0e5ec; text-align: center; margin: 0; padding: 20px; color: #444; }
-        .card { background: #e0e5ec; border-radius: 20px; box-shadow: 9px 9px 16px rgb(163,177,198,0.6), -9px -9px 16px rgba(255,255,255, 0.5); padding: 25px; max-width: 500px; margin: 0 auto 30px auto; }
+        .card { background: #e0e5ec; border-radius: 20px; box-shadow: 9px 9px 16px rgb(163,177,198,0.6), -9px -9px 16px rgba(255,255,255, 0.5); padding: 25px; max-width: 600px; margin: 0 auto 30px auto; }
         h1 { color: #6d5dfc; margin-bottom: 5px;}
         .dato-grande { font-size: 3em; font-weight: bold; color: #6d5dfc; }
         .grid-datos { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-top: 20px; }
@@ -17,13 +17,13 @@
         .amarillo { background: #ffa502; color: #333; display: block; box-shadow: 0 4px 15px rgba(255,165,2, 0.4); }
         .gris { background: #ced6e0; color: #747d8c; display: block; }
         @keyframes parpadeo { 0% {opacity: 1;} 50% {opacity: 0.7;} 100% {opacity: 1;} }
-        #chart_div { width: 100%; height: 250px; }
+        #chart_div { width: 100%; height: 300px; }
     </style>
 </head>
 <body>
 
     <div class="card">
-        <h1>🍇 Viñedo Chubut</h1>
+        <h1>🍇 Viñedo Baruk</h1>
         <div id="reloj" style="color: #777; margin-bottom: 15px;">Esperando conexión...</div>
         
         <div>TEMPERATURA</div>
@@ -41,7 +41,7 @@
         </div>
 
         <div style="margin-top: 20px;">
-            <div id="est-helada" class="estado gris">❄️ Sin Riesgo de Helada</div>
+            <div id="est-helada" class="estado gris">❄️ Antihelada Apagado</div>
             <div id="est-riego" class="estado gris" style="margin-top:5px">🚰 Riego Apagado</div>
         </div>
     </div>
@@ -54,16 +54,15 @@
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
         import { getDatabase, ref, onValue } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
 
-        // --- CONFIGURACION AQUI (¡PEGA TUS DATOS!) ---
+        // --- CONFIGURACION AQUI (¡PEGA TUS DATOS NUEVAMENTE!) ---
         const firebaseConfig = {
-            apiKey: "AIzaSyAfLvQ8E9QB3nQdqSqYOuZF2puSeDncNDo",
+            apiKey: "AIzaSyAfLvQ8E9QB3nQdqSqYOuZF2puSeDncNDo", 
             databaseURL: "https://vinedo-c04b4-default-rtdb.firebaseio.com/" 
         };
 
         const app = initializeApp(firebaseConfig);
         const db = getDatabase(app);
         
-        // Gráficos
         google.charts.load('current', {'packages':['corechart']});
         let historial = [['Hora', 'Temp']];
 
@@ -72,9 +71,15 @@
             const data = snapshot.val();
             if(!data) return;
 
-            // Actualizar interfaz
+            // --- ACTUALIZACIÓN DE DATOS ---
+
             document.getElementById('val-temp').innerText = data.temperatura + " °C";
-            document.getElementById('val-hum').innerText = data.humedad + " %";
+            
+            // CAMBIO 2: Humedad con 1 solo decimal (.toFixed(1))
+            // Nos aseguramos de que sea un número antes de aplicar toFixed
+            let humNum = Number(data.humedad);
+            document.getElementById('val-hum').innerText = humNum.toFixed(1) + " %";
+            
             document.getElementById('val-pres').innerText = Math.round(data.presion) + " hPa";
 
             // Reloj
@@ -82,38 +87,55 @@
             let m = data.minuto < 10 ? "0"+data.minuto : data.minuto;
             document.getElementById('reloj').innerText = "⏱ Hora Simulada: " + h + ":" + m;
 
-            // Estados (Cambio de colores y clases CSS)
+            // --- LÓGICA DE ESTADOS (CAMBIO 3) ---
             const divHelada = document.getElementById('est-helada');
             if (data.motor_helada) {
                 divHelada.className = "estado rojo";
-                divHelada.innerText = "🔥 ¡PELIGRO! HELADA ACTIVA";
+                // Texto cuando está PRENDIDO
+                divHelada.innerText = "🔥 Antihelada Prendido";
             } else {
                 divHelada.className = "estado gris";
-                divHelada.innerText = "❄️ Sin Riesgo de Helada";
+                // Texto cuando está APAGADO
+                divHelada.innerText = "❄️ Antihelada Apagado";
             }
 
             const divRiego = document.getElementById('est-riego');
             if (data.motor_riego) {
                 divRiego.className = "estado amarillo";
-                divRiego.innerText = "💧 RIEGO ENCENDIDO";
+                divRiego.innerText = "💧 Riego Prendido";
             } else {
                 divRiego.className = "estado gris";
                 divRiego.innerText = "🚰 Riego Apagado";
             }
 
-            // Actualizar Gráfico
+            // --- GRÁFICO (CAMBIO 4) ---
             if(google.visualization) {
-                let label = h + ":" + m;
+                let label = h + ":" + m; // Hora en el eje X
+                
                 historial.push([label, data.temperatura]);
-                if(historial.length > 15) historial.splice(1, 1); // Borrar viejos
+                
+                // CAMBIO 4 (Eje X): Mostrar 24 horas. 
+                // Como tu reloj simulado avanza cada 10 min, 24 horas son 144 puntos.
+                // Aumentamos el buffer de memoria a 150 para cubrir todo el día.
+                if(historial.length > 150) historial.splice(1, 1); 
 
                 var options = { 
-                    title: 'Curva de Temperatura', 
+                    title: 'Ciclo Diario de Temperatura (24h)', 
                     curveType: 'function', 
                     legend: 'none',
                     colors: ['#6d5dfc'],
                     backgroundColor: 'transparent',
-                    vAxis: { gridlines: { count: 4 } }
+                    // CAMBIO 4 (Eje Y): Fijar escala de -5 a 40
+                    vAxis: { 
+                        title: 'Grados °C',
+                        viewWindow: { min: -5, max: 40 },
+                        ticks: [-5, 0, 5, 10, 15, 20, 25, 30, 35, 40] // Líneas guía limpias
+                    },
+                    hAxis: {
+                        title: 'Hora',
+                        // Reduce la cantidad de etiquetas si se amontonan
+                        slantedText: true 
+                    }
                 };
                 var chart = new google.visualization.LineChart(document.getElementById('chart_div'));
                 chart.draw(google.visualization.arrayToDataTable(historial), options);
