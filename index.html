@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Monitor Viñedo - Esquel</title>
+    <script type="text/javascript" src="https://www.gstatic.com/charts/loader.js"></script>
+    <style>
+        body { font-family: 'Segoe UI', sans-serif; background: #e0e5ec; text-align: center; margin: 0; padding: 20px; color: #444; }
+        .card { background: #e0e5ec; border-radius: 20px; box-shadow: 9px 9px 16px rgb(163,177,198,0.6), -9px -9px 16px rgba(255,255,255, 0.5); padding: 25px; max-width: 500px; margin: 0 auto 30px auto; }
+        h1 { color: #6d5dfc; margin-bottom: 5px;}
+        .dato-grande { font-size: 3em; font-weight: bold; color: #6d5dfc; }
+        .grid-datos { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-top: 20px; }
+        .cajita { background: rgba(255,255,255,0.5); padding: 10px; border-radius: 10px; box-shadow: inset 5px 5px 10px rgba(163,177,198, 0.2), inset -5px -5px 10px rgba(255,255,255, 0.8); }
+        .estado { padding: 15px; border-radius: 10px; color: white; font-weight: bold; margin-top: 10px; display: none; }
+        .rojo { background: #ff4757; display: block; box-shadow: 0 4px 15px rgba(255,71,87, 0.4); animation: parpadeo 1s infinite; }
+        .amarillo { background: #ffa502; color: #333; display: block; box-shadow: 0 4px 15px rgba(255,165,2, 0.4); }
+        .gris { background: #ced6e0; color: #747d8c; display: block; }
+        @keyframes parpadeo { 0% {opacity: 1;} 50% {opacity: 0.7;} 100% {opacity: 1;} }
+        #chart_div { width: 100%; height: 250px; }
+    </style>
+</head>
+<body>
+
+    <div class="card">
+        <h1>🍇 Viñedo Chubut</h1>
+        <div id="reloj" style="color: #777; margin-bottom: 15px;">Esperando conexión...</div>
+        
+        <div>TEMPERATURA</div>
+        <div id="val-temp" class="dato-grande">-- °C</div>
+
+        <div class="grid-datos">
+            <div class="cajita">
+                <div style="font-size: 0.8em;">HUMEDAD</div>
+                <div id="val-hum" style="font-size: 1.5em;">-- %</div>
+            </div>
+            <div class="cajita">
+                <div style="font-size: 0.8em;">PRESIÓN</div>
+                <div id="val-pres" style="font-size: 1.5em;">-- hPa</div>
+            </div>
+        </div>
+
+        <div style="margin-top: 20px;">
+            <div id="est-helada" class="estado gris">❄️ Sin Riesgo de Helada</div>
+            <div id="est-riego" class="estado gris" style="margin-top:5px">🚰 Riego Apagado</div>
+        </div>
+    </div>
+
+    <div class="card">
+        <div id="chart_div"></div>
+    </div>
+
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+        import { getDatabase, ref, onValue } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
+
+        // --- CONFIGURACION AQUI (¡PEGA TUS DATOS!) ---
+        const firebaseConfig = {
+            apiKey: "AIzaSyAfLvQ8E9QB3nQdqSqYOuZF2puSeDncNDo",
+            databaseURL: "https://vinedo-c04b4-default-rtdb.firebaseio.com/" 
+        };
+
+        const app = initializeApp(firebaseConfig);
+        const db = getDatabase(app);
+        
+        // Gráficos
+        google.charts.load('current', {'packages':['corechart']});
+        let historial = [['Hora', 'Temp']];
+
+        const starCountRef = ref(db, 'vinedo/estado');
+        onValue(starCountRef, (snapshot) => {
+            const data = snapshot.val();
+            if(!data) return;
+
+            // Actualizar interfaz
+            document.getElementById('val-temp').innerText = data.temperatura + " °C";
+            document.getElementById('val-hum').innerText = data.humedad + " %";
+            document.getElementById('val-pres').innerText = Math.round(data.presion) + " hPa";
+
+            // Reloj
+            let h = data.hora < 10 ? "0"+data.hora : data.hora;
+            let m = data.minuto < 10 ? "0"+data.minuto : data.minuto;
+            document.getElementById('reloj').innerText = "⏱ Hora Simulada: " + h + ":" + m;
+
+            // Estados (Cambio de colores y clases CSS)
+            const divHelada = document.getElementById('est-helada');
+            if (data.motor_helada) {
+                divHelada.className = "estado rojo";
+                divHelada.innerText = "🔥 ¡PELIGRO! HELADA ACTIVA";
+            } else {
+                divHelada.className = "estado gris";
+                divHelada.innerText = "❄️ Sin Riesgo de Helada";
+            }
+
+            const divRiego = document.getElementById('est-riego');
+            if (data.motor_riego) {
+                divRiego.className = "estado amarillo";
+                divRiego.innerText = "💧 RIEGO ENCENDIDO";
+            } else {
+                divRiego.className = "estado gris";
+                divRiego.innerText = "🚰 Riego Apagado";
+            }
+
+            // Actualizar Gráfico
+            if(google.visualization) {
+                let label = h + ":" + m;
+                historial.push([label, data.temperatura]);
+                if(historial.length > 15) historial.splice(1, 1); // Borrar viejos
+
+                var options = { 
+                    title: 'Curva de Temperatura', 
+                    curveType: 'function', 
+                    legend: 'none',
+                    colors: ['#6d5dfc'],
+                    backgroundColor: 'transparent',
+                    vAxis: { gridlines: { count: 4 } }
+                };
+                var chart = new google.visualization.LineChart(document.getElementById('chart_div'));
+                chart.draw(google.visualization.arrayToDataTable(historial), options);
+            }
+        });
+    </script>
+</body>
+</html>
