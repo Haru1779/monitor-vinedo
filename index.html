@@ -10,7 +10,15 @@
         .card { background: #e0e5ec; border-radius: 20px; box-shadow: 9px 9px 16px rgb(163,177,198,0.6), -9px -9px 16px rgba(255,255,255, 0.5); padding: 25px; max-width: 600px; margin: 0 auto 30px auto; }
         h1 { color: #6d5dfc; margin-bottom: 5px;}
         .dato-grande { font-size: 3em; font-weight: bold; color: #6d5dfc; }
-        .grid-datos { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-top: 20px; }
+        
+        /* CAMBIO 1: La grilla ahora tiene 3 columnas (1fr 1fr 1fr) para que entren los 3 datos */
+        .grid-datos { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; margin-top: 20px; }
+        
+        /* Ajuste para celulares: si la pantalla es muy chica, pone las cajitas una abajo de otra */
+        @media (max-width: 400px) {
+            .grid-datos { grid-template-columns: 1fr; }
+        }
+
         .cajita { background: rgba(255,255,255,0.5); padding: 10px; border-radius: 10px; box-shadow: inset 5px 5px 10px rgba(163,177,198, 0.2), inset -5px -5px 10px rgba(255,255,255, 0.8); }
         .estado { padding: 15px; border-radius: 10px; color: white; font-weight: bold; margin-top: 10px; display: none; }
         .rojo { background: #ff4757; display: block; box-shadow: 0 4px 15px rgba(255,71,87, 0.4); animation: parpadeo 1s infinite; }
@@ -32,11 +40,17 @@
         <div class="grid-datos">
             <div class="cajita">
                 <div style="font-size: 0.8em;">HUMEDAD</div>
-                <div id="val-hum" style="font-size: 1.5em;">-- %</div>
+                <div id="val-hum" style="font-size: 1.2em; font-weight: bold;">-- %</div>
             </div>
+            
             <div class="cajita">
                 <div style="font-size: 0.8em;">PRESIÓN</div>
-                <div id="val-pres" style="font-size: 1.5em;">-- hPa</div>
+                <div id="val-pres" style="font-size: 1.2em; font-weight: bold;">-- hPa</div>
+            </div>
+
+            <div class="cajita">
+                <div style="font-size: 0.8em;">LUZ SOLAR</div>
+                <div id="val-luz" style="font-size: 1.2em; font-weight: bold;">-- lx</div>
             </div>
         </div>
 
@@ -54,9 +68,9 @@
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
         import { getDatabase, ref, onValue } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
 
-        // --- CONFIGURACION AQUI (¡PEGA TUS DATOS NUEVAMENTE!) ---
+        // --- CONFIGURACION AQUI (¡PEGA TUS DATOS!) ---
         const firebaseConfig = {
-            apiKey: "AIzaSyAfLvQ8E9QB3nQdqSqYOuZF2puSeDncNDo", 
+            apiKey: "PEGAR_TU_API_KEY_AQUI", // <--- ¡OJO! NO BORRES LA COMA
             databaseURL: "https://vinedo-c04b4-default-rtdb.firebaseio.com/" 
         };
 
@@ -71,31 +85,31 @@
             const data = snapshot.val();
             if(!data) return;
 
-            // --- ACTUALIZACIÓN DE DATOS ---
-
+            // --- ACTUALIZAR PANTALLA ---
             document.getElementById('val-temp').innerText = data.temperatura + " °C";
             
-            // CAMBIO 2: Humedad con 1 solo decimal (.toFixed(1))
-            // Nos aseguramos de que sea un número antes de aplicar toFixed
             let humNum = Number(data.humedad);
             document.getElementById('val-hum').innerText = humNum.toFixed(1) + " %";
             
             document.getElementById('val-pres').innerText = Math.round(data.presion) + " hPa";
+
+            // CAMBIO 3: Leer el dato de luz y mostrarlo
+            // Usamos Math.round para quitar decimales, en luz no sirven
+            let luzValor = data.luz ? Math.round(data.luz) : 0; 
+            document.getElementById('val-luz').innerText = luzValor + " lx";
 
             // Reloj
             let h = data.hora < 10 ? "0"+data.hora : data.hora;
             let m = data.minuto < 10 ? "0"+data.minuto : data.minuto;
             document.getElementById('reloj').innerText = "⏱ Hora Simulada: " + h + ":" + m;
 
-            // --- LÓGICA DE ESTADOS (CAMBIO 3) ---
+            // Estados
             const divHelada = document.getElementById('est-helada');
             if (data.motor_helada) {
                 divHelada.className = "estado rojo";
-                // Texto cuando está PRENDIDO
                 divHelada.innerText = "🔥 Antihelada Prendido";
             } else {
                 divHelada.className = "estado gris";
-                // Texto cuando está APAGADO
                 divHelada.innerText = "❄️ Antihelada Apagado";
             }
 
@@ -108,15 +122,11 @@
                 divRiego.innerText = "🚰 Riego Apagado";
             }
 
-            // --- GRÁFICO (CAMBIO 4) ---
+            // Gráfico
             if(google.visualization) {
-                let label = h + ":" + m; // Hora en el eje X
-                
+                let label = h + ":" + m; 
                 historial.push([label, data.temperatura]);
                 
-                // CAMBIO 4 (Eje X): Mostrar 24 horas. 
-                // Como tu reloj simulado avanza cada 10 min, 24 horas son 144 puntos.
-                // Aumentamos el buffer de memoria a 150 para cubrir todo el día.
                 if(historial.length > 150) historial.splice(1, 1); 
 
                 var options = { 
@@ -125,15 +135,13 @@
                     legend: 'none',
                     colors: ['#6d5dfc'],
                     backgroundColor: 'transparent',
-                    // CAMBIO 4 (Eje Y): Fijar escala de -5 a 40
                     vAxis: { 
                         title: 'Grados °C',
                         viewWindow: { min: -5, max: 40 },
-                        ticks: [-5, 0, 5, 10, 15, 20, 25, 30, 35, 40] // Líneas guía limpias
+                        ticks: [-5, 0, 5, 10, 15, 20, 25, 30, 35, 40] 
                     },
                     hAxis: {
                         title: 'Hora',
-                        // Reduce la cantidad de etiquetas si se amontonan
                         slantedText: true 
                     }
                 };
