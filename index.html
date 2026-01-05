@@ -11,18 +11,17 @@
         h1 { color: #6d5dfc; margin-bottom: 5px;}
         .dato-grande { font-size: 3em; font-weight: bold; color: #6d5dfc; }
         
-        /* Grilla de 3 columnas para Temp, Humedad, Presion y Luz */
-        .grid-datos { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; margin-top: 20px; }
+        /* CAMBIO: Grilla de 2 columnas para que queden 4 cajitas (2 arriba, 2 abajo) */
+        .grid-datos { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-top: 20px; }
         
-        @media (max-width: 400px) {
-            .grid-datos { grid-template-columns: 1fr; }
-        }
-
         .cajita { background: rgba(255,255,255,0.5); padding: 10px; border-radius: 10px; box-shadow: inset 5px 5px 10px rgba(163,177,198, 0.2), inset -5px -5px 10px rgba(255,255,255, 0.8); }
         .estado { padding: 15px; border-radius: 10px; color: white; font-weight: bold; margin-top: 10px; display: none; }
         .rojo { background: #ff4757; display: block; box-shadow: 0 4px 15px rgba(255,71,87, 0.4); animation: parpadeo 1s infinite; }
         .amarillo { background: #ffa502; color: #333; display: block; box-shadow: 0 4px 15px rgba(255,165,2, 0.4); }
         .gris { background: #ced6e0; color: #747d8c; display: block; }
+        /* Estilo para el agua (azul) */
+        .azul-suelo { color: #0984e3; font-weight: bold; }
+
         @keyframes parpadeo { 0% {opacity: 1;} 50% {opacity: 0.7;} 100% {opacity: 1;} }
         #chart_div { width: 100%; height: 300px; }
     </style>
@@ -38,18 +37,20 @@
 
         <div class="grid-datos">
             <div class="cajita">
-                <div style="font-size: 0.8em;">HUMEDAD</div>
-                <div id="val-hum" style="font-size: 1.2em; font-weight: bold;">-- %</div>
+                <div style="font-size: 0.8em;">HUMEDAD AIRE</div>
+                <div id="val-hum" style="font-size: 1.5em;">-- %</div>
             </div>
-            
             <div class="cajita">
                 <div style="font-size: 0.8em;">PRESIÓN</div>
-                <div id="val-pres" style="font-size: 1.2em; font-weight: bold;">-- hPa</div>
+                <div id="val-pres" style="font-size: 1.5em;">-- hPa</div>
             </div>
-
             <div class="cajita">
                 <div style="font-size: 0.8em;">LUZ SOLAR</div>
-                <div id="val-luz" style="font-size: 1.2em; font-weight: bold;">-- lx</div>
+                <div id="val-luz" style="font-size: 1.5em;">-- lx</div>
+            </div>
+            <div class="cajita">
+                <div style="font-size: 0.8em;">💧 HUMEDAD SUELO</div>
+                <div id="val-suelo" style="font-size: 1.5em;" class="azul-suelo">-- %</div>
             </div>
         </div>
 
@@ -67,7 +68,7 @@
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
         import { getDatabase, ref, onValue } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
 
-        // TUS CREDENCIALES YA PUESTAS:
+        // ¡NO OLVIDES TU API KEY!
         const firebaseConfig = {
             apiKey: "AIzaSyAfLvQ8E9QB3nQdqSqYOuZF2puSeDncNDo", 
             databaseURL: "https://vinedo-c04b4-default-rtdb.firebaseio.com/" 
@@ -84,18 +85,19 @@
             const data = snapshot.val();
             if(!data) return;
 
+            // Datos
             document.getElementById('val-temp').innerText = data.temperatura + " °C";
-            
-            // Humedad con 1 decimal
-            let humNum = Number(data.humedad);
-            document.getElementById('val-hum').innerText = humNum.toFixed(1) + " %";
-            
+            document.getElementById('val-hum').innerText = Number(data.humedad).toFixed(1) + " %";
             document.getElementById('val-pres').innerText = Math.round(data.presion) + " hPa";
-
-            // LUZ (Nuevo)
+            
             let luzValor = data.luz ? Math.round(data.luz) : 0; 
             document.getElementById('val-luz').innerText = luzValor + " lx";
 
+            // NUEVO: Mostrar Humedad de Suelo
+            let sueloValor = data.suelo ? data.suelo : 0;
+            document.getElementById('val-suelo').innerText = sueloValor + " %";
+
+            // Reloj
             let h = data.hora < 10 ? "0"+data.hora : data.hora;
             let m = data.minuto < 10 ? "0"+data.minuto : data.minuto;
             document.getElementById('reloj').innerText = "⏱ Hora Simulada: " + h + ":" + m;
@@ -119,25 +121,17 @@
                 divRiego.innerText = "🚰 Riego Apagado";
             }
 
-            // Gráfico 24hs (-5 a 40 grados)
+            // Gráfico
             if(google.visualization) {
                 let label = h + ":" + m; 
                 historial.push([label, data.temperatura]);
-                
                 if(historial.length > 150) historial.splice(1, 1); 
 
                 var options = { 
-                    title: 'Ciclo Diario de Temperatura (24h)', 
-                    curveType: 'function', 
-                    legend: 'none',
-                    colors: ['#6d5dfc'],
-                    backgroundColor: 'transparent',
-                    vAxis: { 
-                        title: 'Grados °C',
-                        viewWindow: { min: -5, max: 40 },
-                        ticks: [-5, 0, 5, 10, 15, 20, 25, 30, 35, 40] 
-                    },
-                    hAxis: { title: 'Hora', slantedText: true }
+                    title: 'Ciclo Diario de Temperatura', 
+                    curveType: 'function', legend: 'none', colors: ['#6d5dfc'], backgroundColor: 'transparent',
+                    vAxis: { viewWindow: { min: -5, max: 40 }, ticks: [-5, 0, 5, 10, 15, 20, 25, 30, 35, 40] },
+                    hAxis: { slantedText: true }
                 };
                 var chart = new google.visualization.LineChart(document.getElementById('chart_div'));
                 chart.draw(google.visualization.arrayToDataTable(historial), options);
